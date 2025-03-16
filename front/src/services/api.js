@@ -264,12 +264,12 @@ export const deleteRegionOrArea = async (type, id, companyId) => {
 
 
 // Reservation endpoints
-export const getReservations = async () => {
+export const getReservations = async (page = 1, limit = 10) => {
   try {
-    const response = await api.get('/get-reservation');
+    const response = await api.get(`/get-reservation?page=${page}&limit=${limit}`);
     return response.data;
   } catch (error) {
-    console.error('Rezervasyonları getirme hatası:', error);
+    console.error('Error fetching reservations:', error);
     throw error;
   }
 };
@@ -384,6 +384,18 @@ export const deleteTicketOption = async (ticketId, optionId) => {
     return response.data;
   } catch (error) {
     console.error('Bilet opsiyonu silme hatası:', error);
+    throw error;
+  }
+};
+
+// Rezervasyon filtreleme
+export const filterReservations = async (filters) => {
+  try {
+    console.log('Filtreleme isteği gönderiliyor:', filters);
+    const response = await api.post('/get-reservation/filter', filters);
+    return response.data;
+  } catch (error) {
+    console.error('Rezervasyon filtreleme hatası:', error);
     throw error;
   }
 };

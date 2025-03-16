@@ -17,7 +17,7 @@ module.exports = (db) => {
     // Tüm rezervasyonları ve ticket'ları getir
     router.get('/', (req, res) => {
         const query = `
-            SELECT 
+            SELECT DISTINCT
                 r.id as reservation_id,
                 r.customer_name,
                 r.phone,
@@ -70,9 +70,10 @@ module.exports = (db) => {
                     FROM reservation_payments
                     WHERE reservation_id = r.id
                 ) as total_amount
-            FROM reservations r
+            FROM 
+                (SELECT * FROM reservations ORDER BY id DESC LIMIT 100) r
             LEFT JOIN reservation_tickets rt ON r.id = rt.reservation_id
-            ORDER BY r.created_at DESC
+            ORDER BY r.id DESC
         `;
 
         db.query(query, (error, results) => {
@@ -134,7 +135,9 @@ module.exports = (db) => {
                 return acc;
             }, {});
 
-            res.json(Object.values(formattedResults));
+            // Object.values'u sıralayarak döndür
+            const sortedResults = Object.values(formattedResults).sort((a, b) => b.id - a.id);
+            res.json(sortedResults);
         });
     });
 
@@ -680,6 +683,213 @@ module.exports = (db) => {
                 message: 'Opsiyon başarıyla silindi',
                 affectedRows: results.affectedRows
             });
+        });
+    });
+
+    // Filtreleme endpoint'i
+    router.post('/filter', (req, res) => {
+        const {
+            customer_name,
+            phone,
+            hotel_name,
+            room_number,
+            guide_name,
+            ticket_number,
+            date,
+            date_next,
+            status
+        } = req.body;
+
+        let conditions = [];
+        let params = [];
+
+        // Şirket ID kontrolü - session'dan veya request'ten al
+        const companyId = req.session?.companyId || req.user?.companyId;
+        
+        // Eğer companyId yoksa, tüm rezervasyonları getir (geliştirme amaçlı)
+        // Gerçek ortamda bu kısım kaldırılabilir ve yetkilendirme hatası döndürülebilir
+        if (companyId) {
+            conditions.push('r.company_id = ?');
+            params.push(companyId);
+        } else {
+            console.warn('Filtreleme yapılırken şirket ID bulunamadı. Tüm rezervasyonlar getirilecek.');
+        }
+
+        if (customer_name) {
+            conditions.push('r.customer_name LIKE ?');
+            params.push(`%${customer_name}%`);
+        }
+
+        if (phone) {
+            conditions.push('r.phone LIKE ?');
+            params.push(`%${phone}%`);
+        }
+
+        if (hotel_name) {
+            conditions.push('r.hotel_name LIKE ?');
+            params.push(`%${hotel_name}%`);
+        }
+
+        if (room_number) {
+            conditions.push('r.room_number LIKE ?');
+            params.push(`%${room_number}%`);
+        }
+
+        if (guide_name) {
+            conditions.push('r.guide_name LIKE ?');
+            params.push(`%${guide_name}%`);
+        }
+
+        if (date) {
+            // Eğer date_next varsa, tarih aralığı olarak filtrele
+            if (date_next) {
+                conditions.push('(DATE(r.created_at) >= ? AND DATE(r.created_at) <= ?)');
+                params.push(date, date_next);
+            } else {
+                // Sadece belirli bir tarih için filtrele
+                conditions.push('DATE(r.created_at) = ?');
+                params.push(date);
+            }
+        }
+
+        if (status !== undefined) {
+            conditions.push('r.status = ?');
+            params.push(status ? 1 : 0);
+        }
+
+        if (ticket_number) {
+            conditions.push('EXISTS (SELECT 1 FROM reservation_tickets rt WHERE rt.reservation_id = r.id AND rt.ticket_number LIKE ?)');
+            params.push(`%${ticket_number}%`);
+        }
+
+        const whereClause = conditions.length > 0 
+            ? `WHERE ${conditions.join(' AND ')}` 
+            : '';
+
+        const query = `
+            SELECT DISTINCT
+                r.id as reservation_id,
+                r.customer_name,
+                r.phone,
+                r.hotel_name,
+                r.room_number,
+                r.ticket_count,
+                r.guide_name,
+                r.commission_rate,
+                r.main_comment,
+                r.created_at,
+                (
+                    SELECT SUM((rt2.adult_count * rt2.adult_price) + (rt2.child_count * rt2.half_price))
+                    FROM reservation_tickets rt2
+                    WHERE rt2.reservation_id = r.id
+                ) as cost,
+                r.currency_rates,
+                r.status,
+                rt.id as ticket_id,
+                rt.ticket_number,
+                rt.tour_name,
+                rt.tour_group_name,
+                rt.adult_count,
+                rt.child_count,
+                rt.free_count,
+                rt.currency,
+                rt.date,
+                rt.regions,
+                rt.guide_ref,
+                rt.guide_name as ticket_guide_name,
+                rt.provider_name,
+                rt.provider_ref,
+                rt.time,
+                rt.adult_price,
+                rt.half_price,
+                rt.total_rest_amount,
+                rt.comment,
+                rt.cancellation_reason,
+                rt.status as ticket_status,
+                (
+                    SELECT GROUP_CONCAT(
+                        CASE 
+                            WHEN currency = 'TRY' THEN CONCAT(amount, ' TRY')
+                            WHEN currency = 'USD' THEN CONCAT(amount, ' USD')
+                            WHEN currency = 'EUR' THEN CONCAT(amount, ' EUR')
+                            WHEN currency = 'GBP' THEN CONCAT(amount, ' GBP')
+                            ELSE CONCAT(amount, ' ', currency)
+                        END
+                        SEPARATOR ', '
+                    )
+                    FROM reservation_payments
+                    WHERE reservation_id = r.id
+                ) as total_amount
+            FROM 
+                reservations r
+            LEFT JOIN reservation_tickets rt ON r.id = rt.reservation_id
+            ${whereClause}
+            ORDER BY r.id DESC
+            LIMIT 2000
+        `;
+
+        db.query(query, params, (error, results) => {
+            if (error) {
+                console.error('Rezervasyon filtreleme hatası:', error);
+                return res.status(500).json({
+                    error: 'Rezervasyonlar filtrelenirken bir hata oluştu'
+                });
+            }
+
+            // Rezervasyonları ve ticket'ları grupla
+            const formattedResults = results.reduce((acc, curr) => {
+                if (!acc[curr.reservation_id]) {
+                    acc[curr.reservation_id] = {
+                        id: curr.reservation_id,
+                        customer_name: curr.customer_name,
+                        phone: curr.phone,
+                        hotel_name: curr.hotel_name,
+                        room_number: curr.room_number,
+                        ticket_count: curr.ticket_count,
+                        guide_name: curr.guide_name,
+                        commission_rate: curr.commission_rate,
+                        main_comment: curr.main_comment,
+                        created_at: curr.created_at,
+                        cost: curr.cost,
+                        total_amount: curr.total_amount,
+                        currency_rates: curr.currency_rates,
+                        status: curr.status === 1,
+                        tickets: []
+                    };
+                }
+
+                if (curr.ticket_id) {
+                    acc[curr.reservation_id].tickets.push({
+                        id: curr.ticket_id,
+                        ticket_number: curr.ticket_number,
+                        tour_name: curr.tour_name,
+                        tour_group_name: curr.tour_group_name,
+                        adult_count: curr.adult_count,
+                        child_count: curr.child_count,
+                        free_count: curr.free_count,
+                        currency: curr.currency,
+                        date: curr.date,
+                        regions: curr.regions,
+                        guide_ref: curr.guide_ref,
+                        guide_name: curr.ticket_guide_name,
+                        provider_name: curr.provider_name,
+                        provider_ref: curr.provider_ref,
+                        time: curr.time,
+                        adult_price: curr.adult_price,
+                        half_price: curr.half_price,
+                        total_rest_amount: curr.total_rest_amount,
+                        comment: curr.comment,
+                        cancellation_reason: curr.cancellation_reason,
+                        status: curr.ticket_status
+                    });
+                }
+
+                return acc;
+            }, {});
+
+            // Object.values'u sıralayarak döndür
+            const sortedResults = Object.values(formattedResults).sort((a, b) => b.id - a.id);
+            res.json(sortedResults);
         });
     });
 

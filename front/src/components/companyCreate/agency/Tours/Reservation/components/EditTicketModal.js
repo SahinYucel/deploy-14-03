@@ -5,13 +5,19 @@ import { registerLocale, setDefaultLocale } from 'react-datepicker';
 import tr from 'date-fns/locale/tr';
 import "react-datepicker/dist/react-datepicker.css";
 import { getReservationRegions, getRegionTours, getTicketOptions, addTicketOption, deleteTicketOption } from '../../../../../../services/api';
+import { 
+    CURRENCIES, 
+    isRegionSelected, 
+    handleChange as handleInputChange,
+    handleSubmit as submitForm,
+    handleAddOption as addOption,
+    handleDeleteOption as deleteOption,
+    useTicketEffects
+} from './EditTicketsubHelpers';
 
 // Türkçe lokalizasyonu kaydet
 registerLocale('tr', tr);
 setDefaultLocale('tr');
-
-// Para birimleri listesi
-const CURRENCIES = ['TL', 'USD', 'EUR', 'GBP'];
 
 export default function EditTicketModal({ show, handleClose, ticket, handleSave }) {
   const [editedTicket, setEditedTicket] = useState({
@@ -36,299 +42,25 @@ export default function EditTicketModal({ show, handleClose, ticket, handleSave 
     price: ''
   });
   
-  // Sadece bölgeleri yükle
-  useEffect(() => {
-    const fetchRegions = async () => {
-      try {
-        const regionsData = await getReservationRegions();
-        setRegions(regionsData);
-
-        // Eğer düzenlenen bilet varsa ve bölgesi seçiliyse, o bölgenin turlarını getir
-        if (ticket?.regions) {
-          const selectedRegions = ticket.regions.split(',');
-          const responses = await Promise.all(selectedRegions.map(region => getRegionTours(region)));
-          const allTours = responses.flat();
-          const uniqueTours = allTours.filter((tour, index, self) =>
-            index === self.findIndex((t) => t.id === tour.id)
-          );
-          
-          // Grupları ayıkla
-          const uniqueGroups = uniqueTours
-            .filter(tour => tour.group_name)
-            .reduce((groups, tour) => {
-              if (!groups.find(g => g.group_name === tour.group_name)) {
-                groups.push({
-                  id: tour.main_tour_id,
-                  group_name: tour.group_name
-                });
-              }
-              return groups;
-            }, []);
-          
-          // Eğer grup seçili ise sadece o grubun turlarını göster
-          const filteredTours = ticket.tour_group_name 
-            ? uniqueTours.filter(tour => tour.group_name === ticket.tour_group_name)
-            : uniqueTours;
-          
-          setTours(filteredTours);
-          setTourGroups(uniqueGroups);
-        } else {
-          // Eğer bilet yoksa veya bölge seçili değilse, turları ve grupları temizle
-          setTours([]);
-          setTourGroups([]);
-        }
-      } catch (error) {
-        console.error('Bölgeler yüklenirken hata:', error);
-      }
-    };
-    
-    fetchRegions();
-  }, [ticket]);
-
-  // Modal kapandığında state'leri temizle
-  useEffect(() => {
-    if (!show) {
-      setTours([]);
-      setTourGroups([]);
-    }
-  }, [show]);
-
-  // Modal açıldığında ticket verilerini güncelle
-  useEffect(() => {
-    if (show && ticket) {
-      // "100 USD, 50 EUR" gibi string'i parse edelim
-      const amounts = {};
-      const amountPairs = (ticket.total_rest_amount || '').split(',').map(pair => pair.trim());
-      
-      // Varsayılan değerleri set et
-      CURRENCIES.forEach(currency => {
-        amounts[currency] = '';
-      });
-
-      // Gelen değerleri parse et
-      amountPairs.forEach(pair => {
-        const [amount, currency] = pair.split(' ');
-        if (amount && currency) {
-          amounts[currency] = amount;
-        }
-      });
-
-      const [hour = '', minute = ''] = (ticket.time || '').split(':');
-
-      setEditedTicket({
-        ...ticket,
-        date: ticket.date?.split('T')[0],
-        adult_count: String(ticket.adult_count || 0),
-        child_count: String(ticket.child_count || 0),
-        free_count: String(ticket.free_count || 0),
-        adult_price: String(ticket.adult_price || 0),
-        child_price: String(ticket.half_price || 0),
-        hour,
-        minute,
-        rest_amounts: amounts,
-        status: ticket.status === 1
-      });
-    }
-  }, [ticket, show]);
-
-  // Opsiyonları yükle
-  useEffect(() => {
-    if (show && ticket?.id) {
-      console.log('Fetching options for ticket ID:', ticket.id); // Debug için log
-      getTicketOptions(ticket.id)
-        .then(data => {
-          console.log('Received options:', data); // Debug için log
-          setOptions(data);
-        })
-        .catch(error => {
-          console.error('Opsiyonlar yüklenirken hata:', error);
-        });
-    }
-  }, [show, ticket]);
-
+  // Custom hook ile effect'leri yönet
+  useTicketEffects(show, ticket, setEditedTicket, setRegions, setTours, setTourGroups, setOptions);
+  
+  // Event handler'ları yardımcı fonksiyonlarla yönet
   const handleChange = (e) => {
-    const { name, value, type, checked } = e.target;
-    
-    if (name === 'regions') {
-      // Checkbox için bölge seçimi
-      const currentRegions = editedTicket.regions ? editedTicket.regions.split(',') : [];
-      let newRegions;
-      
-      if (checked) {
-        newRegions = [...currentRegions, value].filter(Boolean);
-      } else {
-        newRegions = currentRegions.filter(region => region !== value);
-      }
-
-      // Eğer hiç bölge seçili değilse turları ve grupları temizle
-      if (newRegions.length === 0) {
-        setTours([]);
-        setTourGroups([]);
-        setEditedTicket(prev => ({
-          ...prev,
-          regions: '',
-          tour_name: '',
-          tour_group_name: ''
-        }));
-        return;
-      }
-
-      // Seçilen tüm bölgelere ait turları getir
-      Promise.all(newRegions.map(region => getRegionTours(region)))
-        .then(responses => {
-          const allTours = responses.flat();
-          const uniqueTours = allTours.filter((tour, index, self) =>
-            index === self.findIndex((t) => t.id === tour.id)
-          );
-          
-          // Grupları ayıkla
-          const uniqueGroups = uniqueTours
-            .filter(tour => tour.group_name)
-            .reduce((groups, tour) => {
-              if (!groups.find(g => g.group_name === tour.group_name)) {
-                groups.push({
-                  id: tour.main_tour_id,
-                  group_name: tour.group_name
-                });
-              }
-              return groups;
-            }, []);
-          
-          setTours(uniqueTours);
-          setTourGroups(uniqueGroups);
-          
-          setEditedTicket(prev => ({
-            ...prev,
-            regions: newRegions.join(','),
-            tour_name: '',
-            tour_group_name: ''
-          }));
-        })
-        .catch(error => {
-          console.error('Bölge turları yüklenirken hata:', error);
-        });
-    } else if (name === 'tour_group_name') {
-      // Önce seçili bölgelerdeki tüm turları tekrar getir
-      const selectedRegions = editedTicket.regions ? editedTicket.regions.split(',') : [];
-      
-      Promise.all(selectedRegions.map(region => getRegionTours(region)))
-        .then(responses => {
-          const allTours = responses.flat();
-          const uniqueTours = allTours.filter((tour, index, self) =>
-            index === self.findIndex((t) => t.id === tour.id)
-          );
-          
-          // Seçilen gruba göre filtrele
-          const filteredTours = value ? uniqueTours.filter(tour => tour.group_name === value) : uniqueTours;
-          setTours(filteredTours);
-          
-          setEditedTicket(prev => ({
-            ...prev,
-            tour_group_name: value,
-            tour_name: '',
-            adult_price: '0',
-            child_price: '0'
-          }));
-        })
-        .catch(error => {
-          console.error('Turlar yüklenirken hata:', error);
-        });
-    } else if (name === 'tour_name') {
-      // Seçilen turun fiyat bilgilerini al
-      const selectedTour = tours.find(tour => tour.name === value);
-      
-      if (selectedTour) {
-        // Tur seçildiyse fiyatları güncelle
-        setEditedTicket(prev => ({
-          ...prev,
-          tour_name: value,
-          adult_price: String(selectedTour.price),
-          child_price: String(selectedTour.child_price),
-          currency: selectedTour.currency
-        }));
-      } else {
-        // Tur seçimi kaldırıldıysa fiyatları sıfırla
-        setEditedTicket(prev => ({
-          ...prev,
-          tour_name: '',
-          adult_price: '0',
-          child_price: '0'
-        }));
-      }
-    } else if (name.startsWith('rest_amount_')) {
-      // Para birimi tutarı değiştiğinde
-      const currency = name.split('_')[2];
-      setEditedTicket(prev => ({
-        ...prev,
-        rest_amounts: {
-          ...prev.rest_amounts,
-          [currency]: value
-        }
-      }));
-    } else {
-      setEditedTicket(prev => ({
-        ...prev,
-        [name]: type === 'checkbox' ? checked : value
-      }));
-    }
+    handleInputChange(e, editedTicket, setEditedTicket, setTours, setTourGroups, tours);
   };
 
   const handleSubmit = (e) => {
-    e.preventDefault();
-    // Boş olmayan tutarları birleştir
-    const restAmountString = CURRENCIES
-      .map(currency => {
-        const amount = editedTicket.rest_amounts[currency];
-        return amount ? `${amount} ${currency}` : null;
-      })
-      .filter(Boolean)
-      .join(', ');
-
-    const formattedTicket = {
-      ...editedTicket,
-      ticket_number: editedTicket.ticket_number,
-      adult_count: parseInt(editedTicket.adult_count || 0),
-      child_count: parseInt(editedTicket.child_count || 0),
-      free_count: parseInt(editedTicket.free_count || 0),
-      adult_price: parseFloat(editedTicket.adult_price || 0),
-      half_price: parseFloat(editedTicket.child_price || 0),
-      total_rest_amount: restAmountString,
-      time: `${editedTicket.hour.padStart(2, '0')}:${editedTicket.minute.padStart(2, '0')}`
-    };
-    handleSave(formattedTicket);
+    submitForm(e, editedTicket, handleSave);
   };
 
-  // Bölge seçili mi kontrolü için yardımcı fonksiyon
-  const isRegionSelected = (regionName) => {
-    const selectedRegions = editedTicket.regions ? editedTicket.regions.split(',') : [];
-    return selectedRegions.includes(regionName);
-  };
-
-  // Yeni opsiyon ekleme
+  // Opsiyon işlemleri
   const handleAddOption = async () => {
-    try {
-      const response = await addTicketOption(ticket.id, newOption);
-      
-      if (response.optionId) {
-        setOptions([...options, { ...newOption, id: response.optionId }]);
-        setNewOption({
-          option_name: '',
-          price: ''
-        });
-      }
-    } catch (error) {
-      console.error('Opsiyon eklenirken hata:', error);
-    }
+    await addOption(ticket.id, newOption, options, setOptions, setNewOption);
   };
 
-  // Opsiyon silme
   const handleDeleteOption = async (optionId) => {
-    try {
-      await deleteTicketOption(ticket.id, optionId);
-      setOptions(options.filter(opt => opt.id !== optionId));
-    } catch (error) {
-      console.error('Opsiyon silinirken hata:', error);
-    }
+    await deleteOption(ticket.id, optionId, options, setOptions);
   };
 
   return (
@@ -362,7 +94,7 @@ export default function EditTicketModal({ show, handleClose, ticket, handleSave 
                       label={region.name}
                       name="regions"
                       value={region.name}
-                      checked={isRegionSelected(region.name)}
+                      checked={isRegionSelected(editedTicket.regions, region.name)}
                       onChange={handleChange}
                       className="mb-1"
                     />
@@ -570,15 +302,7 @@ export default function EditTicketModal({ show, handleClose, ticket, handleSave 
                 />
               </Form.Group>
             </Col>
-            <Form.Group className="mb-3">
-                <Form.Check
-                  type="checkbox"
-                  label="Aktif"
-                  name="status"
-                  checked={editedTicket.status}
-                  onChange={handleChange}
-                />
-              </Form.Group>
+           
           </Row>
 
           <Col md={12}>
@@ -597,7 +321,7 @@ export default function EditTicketModal({ show, handleClose, ticket, handleSave 
                     {options.map((option) => (
                       <tr key={option.id}>
                         <td>{option.option_name}</td>
-                        <td>{option.price} TL</td>
+                        <td>{option.price} </td>
                         <td>
                           <Button
                             variant="danger"
@@ -648,6 +372,16 @@ export default function EditTicketModal({ show, handleClose, ticket, handleSave 
                 </div>
               </div>
             </Form.Group>
+
+            <Form.Group className="mb-3">
+                <Form.Check
+                  type="checkbox"
+                  label="Aktif"
+                  name="status"
+                  checked={editedTicket.status}
+                  onChange={handleChange}
+                />
+              </Form.Group>
           </Col>
         </Modal.Body>
         <Modal.Footer>
