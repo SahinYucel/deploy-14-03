@@ -190,7 +190,6 @@ const Tours = () => {
       end_date: tourData.end_date || null
     };
 
-    console.log('Oluşturulan mainTourData:', mainTourData);
 
     // Boş olmayan pickup zamanlarını filtrele
     const filteredPickupTimes = tourData.pickupTimes

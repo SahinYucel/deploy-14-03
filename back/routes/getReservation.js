@@ -595,5 +595,93 @@ module.exports = (db) => {
         });
     });
 
+    router.get('/ticket/:ticketId/options', (req, res) => {
+        const { ticketId } = req.params;
+        console.log('Fetching options for ticket:', ticketId);
+
+        const query = `
+            SELECT 
+                id,
+                ticket_id,
+                option_name,
+                price
+            FROM ticket_options
+            WHERE ticket_id = ?
+            ORDER BY id DESC
+        `;
+
+        db.query(query, [ticketId], (error, results) => {
+            if (error) {
+                console.error('Bilet opsiyonları alınırken hata:', error);
+                return res.status(500).json({
+                    error: 'Bilet opsiyonları alınamadı'
+                });
+            }
+
+            console.log('Found options:', results);
+            res.json(results);
+        });
+    });
+
+    // Opsiyon ekleme endpoint'i
+    router.post('/ticket/:ticketId/options', (req, res) => {
+        const { ticketId } = req.params;
+        const { option_name, price } = req.body;
+
+        console.log('Adding option:', { ticketId, option_name, price });
+
+        const query = `
+            INSERT INTO ticket_options (
+                ticket_id,
+                option_name,
+                price
+            ) VALUES (?, ?, ?)
+        `;
+
+        db.query(
+            query,
+            [ticketId, option_name, price],
+            (error, results) => {
+                if (error) {
+                    console.error('Opsiyon eklenirken hata:', error);
+                    return res.status(500).json({
+                        error: 'Opsiyon eklenemedi'
+                    });
+                }
+
+                res.json({
+                    message: 'Opsiyon başarıyla eklendi',
+                    optionId: results.insertId
+                });
+            }
+        );
+    });
+
+    // Opsiyon silme endpoint'i
+    router.delete('/ticket/:ticketId/options/:optionId', (req, res) => {
+        const { ticketId, optionId } = req.params;
+
+        console.log('Deleting option:', { ticketId, optionId });
+
+        const query = `
+            DELETE FROM ticket_options 
+            WHERE id = ? AND ticket_id = ?
+        `;
+
+        db.query(query, [optionId, ticketId], (error, results) => {
+            if (error) {
+                console.error('Opsiyon silinirken hata:', error);
+                return res.status(500).json({
+                    error: 'Opsiyon silinemedi'
+                });
+            }
+
+            res.json({
+                message: 'Opsiyon başarıyla silindi',
+                affectedRows: results.affectedRows
+            });
+        });
+    });
+
     return router;
 }; 

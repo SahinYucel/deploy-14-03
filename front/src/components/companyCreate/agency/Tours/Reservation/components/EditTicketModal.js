@@ -4,7 +4,7 @@ import DatePicker from 'react-datepicker';
 import { registerLocale, setDefaultLocale } from 'react-datepicker';
 import tr from 'date-fns/locale/tr';
 import "react-datepicker/dist/react-datepicker.css";
-import { getReservationRegions, getRegionTours } from '../../../../../../services/api';
+import { getReservationRegions, getRegionTours, getTicketOptions, addTicketOption, deleteTicketOption } from '../../../../../../services/api';
 
 // Türkçe lokalizasyonu kaydet
 registerLocale('tr', tr);
@@ -30,6 +30,11 @@ export default function EditTicketModal({ show, handleClose, ticket, handleSave 
   const [tours, setTours] = useState([]);
   const [tourGroups, setTourGroups] = useState([]);
   const [regions, setRegions] = useState([]);
+  const [options, setOptions] = useState([]);
+  const [newOption, setNewOption] = useState({
+    option_name: '',
+    price: ''
+  });
   
   // Sadece bölgeleri yükle
   useEffect(() => {
@@ -125,6 +130,21 @@ export default function EditTicketModal({ show, handleClose, ticket, handleSave 
       });
     }
   }, [ticket, show]);
+
+  // Opsiyonları yükle
+  useEffect(() => {
+    if (show && ticket?.id) {
+      console.log('Fetching options for ticket ID:', ticket.id); // Debug için log
+      getTicketOptions(ticket.id)
+        .then(data => {
+          console.log('Received options:', data); // Debug için log
+          setOptions(data);
+        })
+        .catch(error => {
+          console.error('Opsiyonlar yüklenirken hata:', error);
+        });
+    }
+  }, [show, ticket]);
 
   const handleChange = (e) => {
     const { name, value, type, checked } = e.target;
@@ -282,6 +302,33 @@ export default function EditTicketModal({ show, handleClose, ticket, handleSave 
   const isRegionSelected = (regionName) => {
     const selectedRegions = editedTicket.regions ? editedTicket.regions.split(',') : [];
     return selectedRegions.includes(regionName);
+  };
+
+  // Yeni opsiyon ekleme
+  const handleAddOption = async () => {
+    try {
+      const response = await addTicketOption(ticket.id, newOption);
+      
+      if (response.optionId) {
+        setOptions([...options, { ...newOption, id: response.optionId }]);
+        setNewOption({
+          option_name: '',
+          price: ''
+        });
+      }
+    } catch (error) {
+      console.error('Opsiyon eklenirken hata:', error);
+    }
+  };
+
+  // Opsiyon silme
+  const handleDeleteOption = async (optionId) => {
+    try {
+      await deleteTicketOption(ticket.id, optionId);
+      setOptions(options.filter(opt => opt.id !== optionId));
+    } catch (error) {
+      console.error('Opsiyon silinirken hata:', error);
+    }
   };
 
   return (
@@ -533,6 +580,75 @@ export default function EditTicketModal({ show, handleClose, ticket, handleSave 
                 />
               </Form.Group>
           </Row>
+
+          <Col md={12}>
+            <Form.Group className="mb-3">
+              <Form.Label>Opsiyonlar</Form.Label>
+              <div className="border rounded p-3 mb-3">
+                <table className="table table-sm">
+                  <thead>
+                    <tr>
+                      <th>Opsiyon Adı</th>
+                      <th>Fiyat</th>
+                      <th></th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {options.map((option) => (
+                      <tr key={option.id}>
+                        <td>{option.option_name}</td>
+                        <td>{option.price} TL</td>
+                        <td>
+                          <Button
+                            variant="danger"
+                            size="sm"
+                            onClick={() => handleDeleteOption(option.id)}
+                          >
+                            Sil
+                          </Button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+
+                <div className="mt-3">
+                  <Row>
+                    <Col md={6}>
+                      <Form.Control
+                        placeholder="Opsiyon Adı"
+                        value={newOption.option_name}
+                        onChange={(e) => setNewOption({
+                          ...newOption,
+                          option_name: e.target.value
+                        })}
+                      />
+                    </Col>
+                    <Col md={4}>
+                      <Form.Control
+                        type="number"
+                        placeholder="Fiyat (TL)"
+                        value={newOption.price}
+                        onChange={(e) => setNewOption({
+                          ...newOption,
+                          price: e.target.value
+                        })}
+                      />
+                    </Col>
+                    <Col md={2}>
+                      <Button
+                        variant="success"
+                        onClick={handleAddOption}
+                        disabled={!newOption.option_name || !newOption.price}
+                      >
+                        Ekle
+                      </Button>
+                    </Col>
+                  </Row>
+                </div>
+              </div>
+            </Form.Group>
+          </Col>
         </Modal.Body>
         <Modal.Footer>
           <Button variant="secondary" onClick={handleClose}>

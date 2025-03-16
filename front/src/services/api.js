@@ -347,5 +347,46 @@ export const deleteReservationPayment = async (reservationId, paymentId) => {
   }
 };
 
+// Ticket options endpoints
+export const getTicketOptions = async (ticketId) => {
+  try {
+    const response = await api.get(`/get-reservation/ticket/${ticketId}/options`);
+    return response.data;
+  } catch (error) {
+    console.error('Bilet opsiyonlarını getirme hatası:', error);
+    throw error;
+  }
+};
+
+export const addTicketOption = async (ticketId, optionData) => {
+  try {
+    const response = await api.post(`/get-reservation/ticket/${ticketId}/options`, optionData);
+    return response.data;
+  } catch (error) {
+    console.error('Bilet opsiyonu ekleme hatası:', error);
+    throw error;
+  }
+};
+
+export const updateTicketOption = async (ticketId, optionId, optionData) => {
+  try {
+    const response = await api.put(`/get-reservation/ticket/${ticketId}/options/${optionId}`, optionData);
+    return response.data;
+  } catch (error) {
+    console.error('Bilet opsiyonu güncelleme hatası:', error);
+    throw error;
+  }
+};
+
+export const deleteTicketOption = async (ticketId, optionId) => {
+  try {
+    const response = await api.delete(`/get-reservation/ticket/${ticketId}/options/${optionId}`);
+    return response.data;
+  } catch (error) {
+    console.error('Bilet opsiyonu silme hatası:', error);
+    throw error;
+  }
+};
+
 export default api;
 
