@@ -42,9 +42,7 @@ module.exports = (db) => {
             AND CONCAT(tpt.hour, ':', tpt.minute) = ?
           `;
           
-          const cleanTourName = ticket.tourName.replace(/\s*\(öncelikli\)\s*/i, '');
-          
-          db.query(query, [cleanTourName, ticket.time], (err, results) => {
+          db.query(query, [ticket.tourName, ticket.time], (err, results) => {
             if (err) {
               console.error('Database error:', err);
               reject(err);

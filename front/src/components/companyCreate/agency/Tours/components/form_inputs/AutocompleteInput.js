@@ -53,7 +53,7 @@ const AutocompleteInput = ({
 
   const handleIconClick = (e) => {
     e.stopPropagation(); // Prevent the input click handler from firing
-    navigate('/companyAgencyDashboard/tours/listeler');
+    navigate('/companyAgencyDashboard/definitions/tours/lists');
   };
 
   const filteredOptions = options.filter(option =>

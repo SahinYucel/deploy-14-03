@@ -11,6 +11,8 @@ const DAYS = [
 ];
 
 const DaySelector = ({ selectedDays, onDaySelect, onSelectAll }) => {
+
+  
   const handleDayClick = (dayId) => {
     const isMobile = window.innerWidth < 768;
     if (isMobile && selectedDays.includes(dayId)) {

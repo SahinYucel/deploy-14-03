@@ -271,7 +271,12 @@ const Tours = () => {
             region: time.region || '',
             area: time.area || '',
             isActive: time.isActive !== false,
-            period: time.period || '1'
+            period: time.period || '1',
+            stopSaleStartDate: time.stopSaleStartDate || time.start_pickup_date,
+            stopSaleEndDate: time.stopSaleEndDate || time.end_pickup_date,
+            start_pickup_date: time.start_pickup_date,
+            end_pickup_date: time.end_pickup_date,
+            stopSelling: time.stopSelling || (time.start_pickup_date !== null || time.end_pickup_date !== null)
           })) || []),
           {
             hour: '',
@@ -279,7 +284,12 @@ const Tours = () => {
             region: '',
             area: '',
             isActive: true,
-            period: '1'
+            period: '1',
+            stopSaleStartDate: null,
+            stopSaleEndDate: null,
+            start_pickup_date: null,
+            end_pickup_date: null,
+            stopSelling: false
           }
         ],
         options: tour.relatedData?.options?.map(opt => ({
@@ -441,30 +451,49 @@ const Tours = () => {
   const filteredAndSortedTours = useMemo(() => {
     return createdTours
       .filter(tour => {
-        const matchesSearch = tour.tourName?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                            tour.operator?.toLowerCase().includes(searchQuery.toLowerCase());
-        
-        const matchesActive = showActive === 'all' ? true :
-                            showActive === 'active' ? tour.isActive :
-                            !tour.isActive;
+        // Arama filtresi
+        const searchLower = searchQuery.toLowerCase();
+        const matchesSearch = tour.tourName.toLowerCase().includes(searchLower) ||
+                            tour.operator.toLowerCase().includes(searchLower);
 
-        const matchesBolge = selectedBolge === 'all' ? true :
-                            tour.bolgeler?.includes(selectedBolge);
+        // Aktiflik durumu filtresi
+        const matchesStatus = showActive === 'all' ||
+          (showActive === 'active' && tour.isActive) ||
+          (showActive === 'inactive' && !tour.isActive);
 
-        const matchesStopStatus = showStopStatus === 'all' ? true :
-          showStopStatus === 'stopped' ? 
-            (tour.start_date || tour.end_date || 
-             tour.relatedData?.pickupTimes?.some(time => time.stopSaleStartDate || time.stopSaleEndDate)) : false;
+        // Bölge filtresi
+        const matchesBolge = selectedBolge === 'all' ||
+          (tour.bolgeler && tour.bolgeler.includes(selectedBolge));
 
-        return matchesSearch && matchesActive && matchesBolge && matchesStopStatus;
+        // Stop durumu filtresi
+        const hasStopDates = tour.start_date || tour.end_date;
+        const matchesStopStatus = showStopStatus === 'all' ||
+          (showStopStatus === 'stopped' && hasStopDates);
+
+        return matchesSearch && matchesStatus && matchesBolge && matchesStopStatus;
       })
       .sort((a, b) => {
-        const operatorCompare = (a.operator || '').localeCompare(b.operator || '');
+        // Önce operatöre göre sırala
+        const operatorCompare = a.operator.localeCompare(b.operator);
         if (operatorCompare !== 0) return operatorCompare;
+
+        // Önceliği olmayan turları en sona koy
+        const hasPriorityA = a.priority && a.priority !== '0';
+        const hasPriorityB = b.priority && b.priority !== '0';
         
-        const priorityA = parseInt(a.priority) || 0;
-        const priorityB = parseInt(b.priority) || 0;
-        return priorityA - priorityB;
+        if (hasPriorityA && !hasPriorityB) return -1; // a'yı öne al
+        if (!hasPriorityA && hasPriorityB) return 1;  // b'yi öne al
+        
+        // Her ikisinin de önceliği varsa veya yoksa
+        if (hasPriorityA && hasPriorityB) {
+          // Öncelik değerlerine göre sırala (küçük sayı = yüksek öncelik)
+          const priorityA = parseInt(a.priority);
+          const priorityB = parseInt(b.priority);
+          if (priorityA !== priorityB) return priorityA - priorityB;
+        }
+
+        // Son olarak tur adına göre sırala
+        return a.tourName.localeCompare(b.tourName);
       });
   }, [createdTours, searchQuery, showActive, selectedBolge, showStopStatus]);
 
@@ -490,12 +519,12 @@ const Tours = () => {
       const pickupTimes = [...tour.relatedData.pickupTimes];
       const currentTime = pickupTimes[pickupTimeIndex];
 
-      // isActive değerinin varlığını kontrol edelim
-      const newIsActive = currentTime.isActive === undefined ? false : !currentTime.isActive;
-
+      // isActive değerinin varlığını kontrol edelim ve sadece isActive'i değiştirelim
+      // Diğer özellikleri (stop değerleri dahil) koruyalım
       pickupTimes[pickupTimeIndex] = {
-        ...currentTime,
-        isActive: newIsActive
+        ...currentTime,  // Mevcut tüm özellikleri koru
+        isActive: currentTime.isActive === undefined ? false : !currentTime.isActive
+        // start_pickup_date, end_pickup_date gibi stop değerleri korunacak
       };
       
       tour.relatedData = {
