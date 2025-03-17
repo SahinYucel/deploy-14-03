@@ -13,10 +13,13 @@ app.use(express.urlencoded({ extended: true }));
 app.use(cors({
   origin: function(origin, callback) {
     const allowedOrigins = [
-      'http://localhost:3000',
-      'http://localhost:3001',
-      'http://10.0.2.2:5000',  // Android Emulator için
-      'http://localhost:5000'  // iOS Simulator için
+     // 'http://localhost:3000',
+     // 'http://localhost:3001',
+     // 'http://10.0.2.2:5000',  // Android Emulator için
+     // 'http://localhost:5000'  // iOS Simulator için
+     'http://13.216.32.130',
+     'http://13.216.32.130:3000',
+     'http://13.216.32.130:5000'
     ];
     
     if (!origin || allowedOrigins.indexOf(origin) !== -1) {
@@ -36,7 +39,7 @@ app.use(cors({
 const db = mysql.createConnection({
   host: 'localhost',
   user: 'sahin',
-  password: 'root',
+  password: 'verkac1635.',
   database: 'tour_program',
   // Bağlantı kopma sorunları için ek ayarlar
   waitForConnections: true,
