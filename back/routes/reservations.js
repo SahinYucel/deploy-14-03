@@ -177,13 +177,19 @@ module.exports = (db) => {
           fullTicket: JSON.stringify(ticket, null, 2)
         });
 
-        // İlk bilet için rest tutarlarını hesapla
+        // Rest tutarlarını hesapla
         let totalRestAmount = null;
+        
         // En erken tarih ve saati olan bilet için rest tutarlarını ekle
+        // Eğer tarih ve saat eşitse, en küçük ticket_no'ya sahip bilet için ekle
         if (tickets.every(otherTicket => {
+          const ticketDate = new Date(ticket.date.split('.').reverse().join('-') + 'T' + ticket.time);
+          const otherDate = new Date(otherTicket.date.split('.').reverse().join('-') + 'T' + otherTicket.time);
+          
           return (
-            new Date(ticket.date) < new Date(otherTicket.date) || 
-            (ticket.date === otherTicket.date && ticket.time <= otherTicket.time)
+            ticketDate < otherDate || 
+            (ticketDate.getTime() === otherDate.getTime() && 
+             (parseInt(ticket.ticket_no) < parseInt(otherTicket.ticket_no) || ticket === otherTicket))
           );
         }) && customerInfo.paymentMethods.length > 0) {
           const restAmounts = customerInfo.paymentMethods

@@ -351,7 +351,7 @@ export default function EditTicketModal({ show, handleClose, ticket, handleSave 
                     <Col md={4}>
                       <Form.Control
                         type="number"
-                        placeholder="Fiyat (TL)"
+                        placeholder="Fiyat"
                         value={newOption.price}
                         onChange={(e) => setNewOption({
                           ...newOption,

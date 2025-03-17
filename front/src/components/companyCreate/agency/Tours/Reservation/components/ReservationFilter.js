@@ -5,7 +5,6 @@ import { registerLocale } from 'react-datepicker';
 import tr from 'date-fns/locale/tr';
 import { addDays } from 'date-fns';
 import "react-datepicker/dist/react-datepicker.css";
-import "./EditTicketsubHelpers/ReservationFilter.css";
 
 // Türkçe lokalizasyonu kaydet
 registerLocale('tr', tr);
